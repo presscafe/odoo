@@ -213,3 +213,42 @@ class TestLotSerial(TestStockCommon):
         self.assertEqual(move.state, 'done')
         self.assertEqual(starting_quant.quantity, 1)
         self.assertEqual(self.lot_p_b.location_id, self.locationA)
+
+    def test_lot_id_with_branch_company(self):
+        """Test that a lot can be created in branch company when
+        the product is limited to the parent company"""
+        branch_a = self.env['res.company'].create({
+            'name': 'Branch X',
+            'country_id': self.env.company.country_id.id,
+            'parent_id': self.env.company.id,
+        })
+        self.assertEqual(self.productB.tracking, 'serial')
+        self.productB.company_id = self.env.company
+        branch_a_warehouse = self.env['stock.warehouse'].search([('company_id', '=', branch_a.id)])
+        branch_receipt_type = self.env['stock.picking.type'].search([('company_id', '=', branch_a.id), ('code', '=', 'incoming')], limit=1)
+        # create a receipt and confirm it
+        picking1 = self.env['stock.picking'].create({
+            'name': 'Picking 1',
+            'location_id': self.customer_location,
+            'location_dest_id': branch_a_warehouse.lot_stock_id.id,
+            'picking_type_id': branch_receipt_type.id,
+        })
+        move = self.env["stock.move"].with_company(branch_a).create({
+            'name': 'test_move',
+            'location_id': self.customer_location,
+            'location_dest_id': branch_a_warehouse.lot_stock_id.id,
+            'product_id': self.productB.id,
+            'product_uom_qty': 1.0,
+            'picking_id': picking1.id,
+        })
+        picking1.with_company(branch_a).action_confirm()
+        move.move_line_ids.lot_name =  'sn_test'
+        move.picked = True
+        picking1.with_company(branch_a)._action_done()
+        self.assertTrue(move.move_line_ids.lot_id)
+        self.assertEqual(move.state, 'done')
+        sn_form = Form(self.env['stock.lot'].with_company(branch_a))
+        sn_form.name = 'sn_test_2'
+        sn_form.product_id = self.productB
+        sn = sn_form.save()
+        self.assertEqual(sn.company_id, branch_a)

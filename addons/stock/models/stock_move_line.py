@@ -701,6 +701,7 @@ class StockMoveLine(models.Model):
         return {
             'name': self.lot_name,
             'product_id': self.product_id.id,
+            'company_id': self.company_id.id,
         }
 
     def _create_and_assign_production_lot(self):
